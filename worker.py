@@ -80,6 +80,7 @@ def get_available_memory():
 
 def do_docker_pull(image_name, task_id, secret):
     logger.info("Running docker pull for image: {}".format(image_name))
+    
     try:
         cmd = ['docker', 'pull', image_name]
         docker_pull = check_output(cmd)
@@ -192,16 +193,29 @@ def _send_update(task_id, status, secret, virtual_host='/', extra=None):
     if extra:
         task_args['extra'] = extra
     logger.info("Updating task=%s status to %s", task_id, status)
+    logger.info("SECRET:{}".format(secret))
     with app.connection() as new_connection:
         # We need to send on the main virtual host, not whatever host we're currently
         # connected to.
-        new_connection.virtual_host = virtual_host
-        app.send_task(
-            'apps.web.tasks.update_submission',
-            args=(task_id, task_args, secret),
-            connection=new_connection,
-            queue="submission-updates",
-        )
+        ## BB - we need a new task for apps.web.tasks.update_image_upload if that is the task type
+        if extra['metadata'] == 'image upload':
+            logger.info("WE SHOULD BE HERE")
+            new_connection.virtual_host = virtual_host
+            app.send_task(
+                'apps.web.tasks.update_image_upload',
+                args=(task_id, task_args, secret),
+                connection=new_connection,
+                queue="image-upload-updates",
+            )
+        else:
+            logger.info("NOT HERE")
+            new_connection.virtual_host = virtual_host
+            app.send_task(
+                'apps.web.tasks.update_submission',
+                args=(task_id, task_args, secret),
+                connection=new_connection,
+                queue="submission-updates",
+            )
 
 
 def put_blob(url, file_path):
@@ -222,6 +236,198 @@ class ExecutionTimeLimitExceeded(Exception):
 
 def alarm_handler(signum, frame):
     raise ExecutionTimeLimitExceeded
+
+
+# BB - Takes too long for > 1GB images
+@task(name="compute_worker_test")
+def test(task_id, task_args):
+    docker_image_path="/tmp/codalab/docker_images/"
+    logger.info("AJAX initiated job program to load chuncks of zip file being uploaded")
+    logger.info(task_args)
+    try:
+        import os, sys
+        from subprocess import Popen, PIPE
+
+        SERVICE_PRINCIPAL_APPID=""
+        SERVICE_PRINCIPAL_CLIENT_SECRET=""
+
+        def load():
+            logger.info("In LOAD")
+            load_cmd = "docker load -i {}/{}".format(docker_image_path, task_args['file_name'])
+            logger.info(load_cmd)
+
+            process = Popen(load_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+            stdout, stderr = process.communicate()
+            print "stdout: " + stdout
+            print"stderr: " + stderr
+
+            # Get tag
+            original_repo_tag = stdout.replace('Loaded image: ', '').replace('\n','')
+            return original_repo_tag
+
+        def tag(input_tag, output_tag):
+            logger.info("In TAG")
+            tag_cmd = "docker tag {} {}".format(input_tag, output_tag)
+            logger.info(tag_cmd)
+
+            process = Popen(tag_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+            stdout, stderr = process.communicate()
+            print "stdout: " + stdout
+            print "stderr: " + stderr
+
+
+        def login(registry=".azurecr.io"):
+            logger.info("In LOGIN")
+            login_cmd = "docker login {registry} --username {appid} --password {secret}".format(appid=SERVICE_PRINCIPAL_APPID,secret=SERVICE_PRINCIPAL_CLIENT_SECRET,registry=registry)
+
+            process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+            stdout, stderr = process.communicate()
+            print "stdout: " + stdout
+            print "stderr: " + stderr
+
+        def push(image='hello-world:latest'):
+            logger.info("In PUSH")
+            push_cmd = """docker push {0}""".format(image)
+            logger.info("Image we are having trouble with: {}".format(image))
+            process = Popen(push_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+            stdout, stderr = process.communicate()
+            print "stdout: " + stdout
+            print "stderr: " + stderr
+
+        def clean_up(original_repo_tag, full_output_tag):
+            logger.info("In CLEAN UP")
+
+            logger.info("Deleting original")
+            cln_cmd_orig = """docker image rm -f {0}""".format(original_repo_tag)
+            process = Popen(cln_cmd_orig.split(" "), stdout=PIPE, stderr=PIPE)
+            stdout_orig, stderr_orig = process.communicate()
+            print "stdout_orig: " + stdout_orig
+            print "stderr_orig: " + stderr_orig
+
+            logger.info("Deleting tagged version")
+            cln_cmd_tagged = """docker image rm -f {0}""".format(full_output_tag)
+            process = Popen(cln_cmd_tagged.split(" "), stdout=PIPE, stderr=PIPE)
+            stdout_tagged, stderr_tagged = process.communicate()
+            print "stdout_tagged: " + stdout_tagged
+            print "stderr_tagged: " + stderr_tagged
+
+            os.remove(docker_image_path+task_args['file_name'])
+
+        # Get old image repo/tag and create a new one
+        original_repo_tag = load()
+        image_tag_list = original_repo_tag.split(":")
+        if len(image_tag_list) > 1:
+            image_tag = "{repo}_{tag}".format(repo=image_tag_list[0].replace('/','-'), tag=image_tag_list[1])
+        elif len(image_tag_list) == 1:
+            image_tag = image_tag_list[0]
+
+        image_tag_user = 'user_{user}:tag_{image_tag}'.format(image_tag=image_tag, user=task_args['user'])
+        full_output_tag = '.azurecr.io/'+image_tag_user
+
+        tag(original_repo_tag, full_output_tag)
+
+        # login to push
+        login()
+        # push
+        push(image=full_output_tag)
+        clean_up(original_repo_tag, full_output_tag)
+
+        time.sleep(5)
+        _send_update(task_id, 'finished', secret=task_args['secret'], extra={'metadata': 'image upload'})
+    except:
+        _send_update(task_id, 'failed', secret=task_args['secret'], extra={'metadata': 'image upload'})
+
+
+@task(name="compute_worker_image_upload") # This will build the image onsite from user uploaded instructions to cut down on load time
+def test(task_id, task_args):
+    docker_image_path = "/tmp/codalab/docker_images"
+    temp_dir = '/tmp/codalab' # local development; should exist already
+
+    logger.info('#### new worker ####')
+    logger.info(task_args)
+
+    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_CLIENT_ID', 'NOT FOUND')
+    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_CLIENT_SECRET', 'NOT FOUND')
+    AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+
+    REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
+    # task_args should look like this:
+    # task_args = {'file_name': 'mednist_docker_image.zip','user':'24'}
+    unzip_dir = os.path.join(temp_dir,'tmp_unzip_dir')
+
+    def login(registry=REGISTRY):
+        login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
+            appid=SERVICE_PRINCIPAL_APPID, secret=SERVICE_PRINCIPAL_CLIENT_SECRET, registry=registry)
+
+        process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+        stdout, stderr = process.communicate()
+        print("stdout: " + stdout)
+        print("stderr: " + stderr)
+
+    def unzip():
+        try:
+            # pdb.set_trace()
+            shutil.rmtree(unzip_dir)
+        except:
+            print('creating {} directory'.format(unzip_dir))
+            os.mkdir(unzip_dir)
+            shutil.copyfile(src=os.path.join(docker_image_path, task_args['file_name']),dst=os.path.join(unzip_dir, task_args['file_name']))
+        with ZipFile(os.path.join(unzip_dir, task_args['file_name']), 'r') as zipObj:
+            zipObj.extractall(path=unzip_dir)
+
+    def build(repo,image):
+        tag = task_args['file_name'].replace('.zip','').replace('\n','').replace(' ','')
+        tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
+        try:
+            os.chdir(unzip_dir)
+        except:
+            raise Exception('Can\'t get into {}'.format(unzip_dir))
+        print('done')
+        docker_build_cmd = "docker build -t {}/user_{}:{} .".format(repo,image,tag)
+        process = Popen(docker_build_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+        stdout, stderr = process.communicate()
+        print("stdout: " + stdout)
+        print("stderr: " + stderr)
+
+    def push(repo,image):
+        tag = task_args['file_name'].replace('.zip','').replace('\n','').replace(' ','')
+        tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
+        docker_push_cmd = "docker push {}/user_{}:{}".format(repo,image,tag)
+        process = Popen(docker_push_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+        stdout, stderr = process.communicate()
+        print("stdout: " + stdout)
+        print("stderr: " + stderr)
+
+    def clean_up(repo,image):
+        # Docker image
+        tag = task_args['file_name'].replace('.zip','').replace('\n','').replace(' ','')
+        tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
+        docker_clean_up_cmd = "docker image rm {}/user_{}:{}".format(repo,image,tag)
+        process = Popen(docker_clean_up_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+        stdout, stderr = process.communicate()
+        print("stdout: " + stdout)
+        print("stderr: " + stderr)
+        # Zipfile and extracted directory
+        try:
+            # pdb.set_trace()
+            os.chdir('../') # meant to bring you to path in variable `temp_dir`
+            shutil.rmtree(unzip_dir)
+            os.remove(os.path.join(docker_image_path, task_args['file_name']))
+        except:
+            raise Exception( "Can\'t find {} or {}".format( unzip_dir, os.path.join(docker_image_path, task_args['file_name']) ) )
+
+    try:
+        login()
+        unzip()
+        build(REGISTRY,task_args['user'])
+        push(REGISTRY,task_args['user'])
+        clean_up(REGISTRY,task_args['user'])
+        # time.sleep(5)
+        _send_update(task_id, 'finished', secret=task_args['secret'], extra={
+                     'metadata': 'image upload'})
+    except:
+        _send_update(task_id, 'failed', secret=task_args['secret'], extra={
+                     'metadata': 'image upload'})
 
 
 @task(name="compute_worker_run")
@@ -524,6 +730,74 @@ def run(task_id, task_args):
                 ]
                 
                 prog_cmd = docker_cmd + prog_cmd
+
+                try: # BB
+                    logger.info("Attempting to Login to docker registry")
+                    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_CLIENT_ID', 'NOT FOUND')
+                    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_CLIENT_SECRET', 'NOT FOUND')
+                    AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+                    REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
+                    # task_args should look like this:
+                    # task_args = {'file_name': 'mednist_docker_image.zip','user':'24'}
+                    temp_dir = os.environ.get('SUBMISSION_TEMP_DIR', '/tmp/codalab')
+                    unzip_dir = os.path.join(temp_dir,'tmp_unzip_dir')
+
+                    def login(registry=REGISTRY):
+                        login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
+                            appid=SERVICE_PRINCIPAL_APPID, 
+                            secret=SERVICE_PRINCIPAL_CLIENT_SECRET, 
+                            registry=registry)
+
+                        process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+                        stdout, stderr = process.communicate()
+                        print("stdout: " + stdout)
+                        print("stderr: " + stderr)
+                    login()
+
+                except:
+                    logger.info("Docker Login Failed")
+
+                participant_docker_submission_cmd = [
+                    'docker',
+                    'run',
+                    # Ask all participants to add this user
+                    #'-u',
+                    #'participant',
+                    # Cut internet
+                    '--net',
+                    'none',
+                    # Remove it after run
+                    '--rm',
+                    # Add support for GPUs and nvidia
+                    # '--gpus',
+                    # 'all',
+                    # Give it a name associated to task_id
+                    '--name={}'.format("participant_docker_submission_taskid_"+str(task_id)),
+                    # Try the new timeout feature
+                    '--stop-timeout={}'.format(execution_time_limit),
+                    # Don't allow subprocesses to raise privileges
+                    '--security-opt=no-new-privileges',
+                    # Set the right volume
+                    '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabmain/input-data/training-data/'), # :ro for read-only file system
+                    '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
+                    # Set aside 512m memory for the host
+                    #'--memory', '{}MB'.format(available_memory_mib - 512),
+                    # Don't buffer python output, so we don't lose any
+                    #'-e', 'PYTHONUNBUFFERED=1',
+                    # Set current working directory
+                    #'-w', run_dir,
+                    # Note that hidden data dir is excluded here!
+                    # Set the right image
+                    task_args['submit_docker_command'],
+                ]
+
+                if task_args['submit_docker_command'] != 'this is not a docker submission':
+                    print('@CUSTOM DOCKER START@')
+                    logger.info("Invoking participant docker submission: %s", participant_docker_submission_cmd)
+                    participant_docker_process = Popen(participant_docker_submission_cmd)
+                    participant_docker_process.wait() # This halts other actions till this run isfinished.
+                    print('@CUSTOM DOCKER END@')
+
 
                 logger.info("Invoking program: %s", " ".join(prog_cmd))
                 evaluator_process = Popen(

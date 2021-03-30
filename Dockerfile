@@ -1,5 +1,11 @@
 FROM ubuntu:18.04
- 
+
+
+#####
+# Install vim
+#####
+RUN apt update -y; apt-get install vim -y; 
+
 #####
 # Install docker 19.03
 #####
