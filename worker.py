@@ -116,7 +116,7 @@ def get_bundle(root_dir, relative_dir, url):
     file_name = url_without_params.split('/')[-1]
     file_ext = os.path.splitext(file_name)[1]
 
-    logger.debug("get_bundle :: Getting %s from %s" % (file_name, url))
+    logger.info("get_bundle :: Getting %s from %s" % (file_name, url))
 
     # Save the bundle to a temp file
     # file_download_path = os.path.join(root_dir, file_name)
@@ -175,7 +175,7 @@ def get_bundle(root_dir, relative_dir, url):
         for (k, v) in metadata.items():
             if k not in ("description", "command", "exitCode", "elapsedTime", "stdout", "stderr", "submitted-by", "submitted-at"):
                 if isinstance(v, str):
-                    logger.debug("get_bundle :: Fetching recursive bundle %s %s %s" % (bundle_path, k, v))
+                    logger.info("get_bundle :: Fetching recursive bundle %s %s %s" % (bundle_path, k, v))
                     # Here K is the relative directory and V is the url, like
                     # input: http://test.com/goku?sas=123
                     metadata[k] = get_bundle(bundle_path, k, v)
@@ -546,6 +546,8 @@ def run(task_id, task_args):
             if os.path.exists(input_dir) == False:
                 os.mkdir(input_dir)
                 os.chmod(input_dir, 0o777)
+        logger.info("type: {}".format(type(bundles)))
+        logger.info("bundle keys: {}".format(bundles.keys()))
         # Verify we have a program
         prog_rel_path = 'program'
         if prog_rel_path not in bundles:
@@ -778,8 +780,10 @@ def run(task_id, task_args):
                     # Don't allow subprocesses to raise privileges
                     '--security-opt=no-new-privileges',
                     # Set the right volume
-                    '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabmain/input-data/training-data/'), # :ro for read-only file system
+                    # '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/training-data/'), # :ro for read-only file system; Template Challenge
+                    '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/MedNIST/test-data/'), # :ro for read-only file system; MedNIST Challenge
                     '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
+                    '-v', '{0}:/mnt/reference'.format('/mnt/medicicodalabdev/input-data/MedNIST/reference-data/'),
                     # Set aside 512m memory for the host
                     #'--memory', '{}MB'.format(available_memory_mib - 512),
                     # Don't buffer python output, so we don't lose any

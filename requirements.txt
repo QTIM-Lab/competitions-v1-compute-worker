@@ -1,5 +1,13 @@
 celery==3.1.25
-requests==1.2.3
+# requests==1.2.3
+requests==2.24.0
 PyYAML==3.10
 psutil==2.1.1
 python-dotenv
+pathlib
+
+# Azure
+azure-storage-file==2.1.0
+azure-identity==1.4.0
+azure-mgmt-storage==9.0.0
+azure-storage-blob==12.3.1
