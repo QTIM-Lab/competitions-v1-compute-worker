@@ -11,3 +11,6 @@ azure-storage-file==2.1.0
 azure-identity==1.4.0
 azure-mgmt-storage==9.0.0
 azure-storage-blob==12.3.1
+
+# Data
+sklearn
