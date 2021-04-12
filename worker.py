@@ -711,8 +711,8 @@ def run(task_id, task_args):
                     # Don't allow subprocesses to raise privileges
                     '--security-opt=no-new-privileges',
                     # Set the right volume
-                    '-v', '{0}:{0}'.format(run_dir),
-                    '-v', '{0}:{0}'.format(shared_dir),
+                    '-v', '{0}:{0}'.format(run_dir), #/tmp/codalab/tmp######/run - this path has all input, output and program folders
+                    '-v', '{0}:{0}'.format(shared_dir), #/tmp/codalab/tmpXXXXXX - not the same as above path at all
                     # Set aside 512m memory for the host
                     '--memory', '{}MB'.format(available_memory_mib - 512),
                     # Don't buffer python output, so we don't lose any
@@ -783,7 +783,7 @@ def run(task_id, task_args):
                     # '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/training-data/'), # :ro for read-only file system; Template Challenge
                     '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/MedNIST/test-data/'), # :ro for read-only file system; MedNIST Challenge
                     '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
-                    '-v', '{0}:/mnt/reference'.format('/mnt/medicicodalabdev/input-data/MedNIST/reference-data/'),
+                    # '-v', '{0}:/mnt/reference'.format('/mnt/medicicodalabdev/input-data/MedNIST/reference-data/'), # CANT GIE THIS TO PARTICIPANTS!
                     # Set aside 512m memory for the host
                     #'--memory', '{}MB'.format(available_memory_mib - 512),
                     # Don't buffer python output, so we don't lose any
@@ -802,7 +802,7 @@ def run(task_id, task_args):
                     participant_docker_process.wait() # This halts other actions till this run isfinished.
                     print('@CUSTOM DOCKER END@')
 
-
+                # Scoring program
                 logger.info("Invoking program: %s", " ".join(prog_cmd))
                 evaluator_process = Popen(
                     prog_cmd,
