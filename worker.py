@@ -768,6 +768,7 @@ def run(task_id, task_args):
                     # Cut internet
                     '--net',
                     'none',
+                    '--shm-size=256m',
                     # Remove it after run
                     '--rm',
                     # Add support for GPUs and nvidia
