@@ -346,8 +346,8 @@ def test(task_id, task_args):
     logger.info('#### new worker ####')
     logger.info(task_args)
 
-    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_CLIENT_ID', 'NOT FOUND')
-    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_CLIENT_SECRET', 'NOT FOUND')
+    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
+    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
     AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
 
     REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
@@ -457,6 +457,9 @@ def run(task_id, task_args):
     output_url = task_args['output_url']
     detailed_results_url = task_args.get('detailed_results_url')
     private_output_url = task_args['private_output_url']
+    
+    special_results_url = task_args['special_results_url'] # BB
+    logger.info("### \n\n\n special_results_url: {}###\n\n\n".format(special_results_url))
 
     execution_time_limit = task_args['execution_time_limit']
     # container = task_args['container_name']
@@ -548,6 +551,9 @@ def run(task_id, task_args):
                 os.chmod(input_dir, 0o777)
         logger.info("type: {}".format(type(bundles)))
         logger.info("bundle keys: {}".format(bundles.keys()))
+
+        predictions_dir = join(input_dir, 'res') # BB './tmpfQycVE'/run/input/res' 
+
         # Verify we have a program
         prog_rel_path = 'program'
         if prog_rel_path not in bundles:
@@ -600,8 +606,79 @@ def run(task_id, task_args):
             stdout_file_name = 'prediction_stdout_file.txt'
             stderr_file_name = 'prediction_stderr_file.txt'
         else:
+            # special_results_file_name = 'special_results_file.zip' # BB
             stdout_file_name = 'stdout.txt'
             stderr_file_name = 'stderr.txt'
+        # BB
+        #!/usr/bin/env python
+        # import sys
+        # import urllib
+
+        # import json
+        # import logging.config
+        # import os
+        # import uuid
+
+        # import psutil
+        # import signal
+        # import math
+        # import re
+        # import shutil
+        # import socket
+        # import tempfile
+        # import time
+        # import traceback
+
+        # import requests
+        # import yaml
+
+        # from os.path import join, exists
+        # from glob import glob
+        # from subprocess import Popen, call, check_output, CalledProcessError, PIPE
+        # from zipfile import ZipFile
+
+        # from billiard import SoftTimeLimitExceeded
+        # from celery import Celery, task
+
+
+        # logger = logging.getLogger()
+        # # Stop duplicate log entries in Celery
+        # logger.propagate = False
+
+        # def put_blob(url, file_path):
+        #     logger.info("Putting blob %s in %s" % (file_path, url))
+        #     requests.put(
+        #         url,
+        #         data=open(file_path, 'rb'),
+        #         headers={
+        #             'x-ms-blob-type': 'BlockBlob',
+        #             'x-ms-version': '2018-03-28',
+        #         }
+        #     )
+
+        # special_results_url = "https://medicicodalabdev.blob.core.windows.net/bundles/submission_special_results/149/ef0a9/special_results_file.zip?sr=b&sp=w&sv=2014-02-14&st=2021-04-23T22%3A58%3A06Z&sig=CD5ILXrU9g7pWeXi8%2BuS0d3JC8jBmEGDnwatLxhmqlY=&se=2021-06-22T22%3A58%3A06Z"
+        # temp_dir = "./"
+        # root_dir = tempfile.mkdtemp(dir=temp_dir) # './tmpfQycVE'
+        # input_dir = join(root_dir, 'run', 'input') # './tmpfQycVE/run/input'
+        # predictions_dir = join(input_dir, 'res') # './tmpfQycVE'/run/input/res'
+        # special_results_file_name = 'special_results_file.txt'
+        # special_results_file = join(predictions_dir, special_results_file_name) # './tmpfQycVE'/run/input/res/special_results_file.txt'
+
+        # # os.makedirs(predictions_dir) # './tmptHp9O6/run/input/res/'; don't need it
+        # with open(special_results_file, 'w') as file:
+        #     file.write('Let\'s hope this works')
+
+        # os.listdir(predictions_dir) # ['special_results_file.txt']
+
+        # shutil.make_archive(os.path.join(input_dir, "special_results_file"), 'zip', predictions_dir, ".")
+        # # shutil.make_archive("./tmpgYji52/run/input/special_results_file",
+        # #                     "zip", 
+        # #                     "./tmpgYji52/run/input/res", 
+        # #                     ".")
+        # shutil.move(os.path.join(input_dir, "special_results_file.zip"), os.path.join(predictions_dir, "special_results_file.zip"))
+        # put_blob(special_results_url, predictions_dir+"/special_results_file.zip")
+
+        # BB
 
         stdout_file = join(run_dir, stdout_file_name)
         stderr_file = join(run_dir, stderr_file_name)
@@ -735,8 +812,8 @@ def run(task_id, task_args):
 
                 try: # BB
                     logger.info("Attempting to Login to docker registry")
-                    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_CLIENT_ID', 'NOT FOUND')
-                    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_CLIENT_SECRET', 'NOT FOUND')
+                    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
+                    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
                     AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
                     REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
                     # task_args should look like this:
@@ -801,6 +878,37 @@ def run(task_id, task_args):
                     participant_docker_process = Popen(participant_docker_submission_cmd)
                     participant_docker_process.wait() # This halts other actions till this run isfinished.
                     print('@CUSTOM DOCKER END@')
+                logger.info("\n\n$$$$$$$$$$$$\n\n {} \n\n$$$$$$$$$$$\n\n".format(os.listdir(predictions_dir))) # BB
+
+                # BB
+                # Making fake model content
+                special_results_file_name = 'special_results_file.txt'
+                special_results_file = join(predictions_dir, special_results_file_name) # './tmpfQycVE'/run/input/res/special_results_file.txt'
+
+                with open(special_results_file, 'w') as file:
+                    file.write('Writing \"model\" content')
+
+                # Create the zip archive
+                shutil.make_archive(os.path.join(input_dir, "special_results_file"), 'zip', predictions_dir, ".")
+
+                # Copy archive into ./res folder as we created it one directory up
+                shutil.move(os.path.join(input_dir, "special_results_file.zip"), os.path.join(predictions_dir, "special_results_file.zip"))
+                # BB
+                # This could go in a score program that is specific to the training phase or maybe it should stay in the worker
+                training_phase = True
+                if training_phase:
+                    model_files = [i for i in os.listdir(predictions_dir) if i.find('special_results_file.zip') != -1]
+                    if len(model_files) == 0:
+                        # check results directory (model and classification results dir)
+                        raise Exception('No model file found...{}'.format(model_files))
+                    elif len(model_files) > 1:
+                        # check results directory (model and classification results dir)
+                        raise Exception('Multiple model files found...{}'.format(model_files))
+                    elif len(model_files) == 1:
+                        # Copy model archive to azure
+                        # put_blob(special_results_url, predictions_dir + "/" + "special_results_file.zip")
+                        put_blob(special_results_url, predictions_dir + "/" + model_files[0])
+
 
                 # Scoring program
                 logger.info("Invoking program: %s", " ".join(prog_cmd))
@@ -979,7 +1087,8 @@ def run(task_id, task_args):
         stderr.close()
 
         logger.info("Saving output files")
-
+        
+        # put_blob(special_results_url, special_results_file) # BB
         put_blob(stdout_url, stdout_file)
         put_blob(stderr_url, stderr_file)
 
@@ -990,6 +1099,7 @@ def run(task_id, task_args):
             put_blob(ingestion_program_stderr_url, ingestion_stderr_file)
 
         private_dir = join(output_dir, 'private')
+        print("PRIVATE DIR:", private_dir)
         if os.path.exists(private_dir):
             logger.info("Packing private results...")
             private_output_file = join(root_dir, 'run', 'private_output.zip')
@@ -997,7 +1107,7 @@ def run(task_id, task_args):
             put_blob(private_output_url, private_output_file)
             shutil.rmtree(private_dir, ignore_errors=True)
 
-        # Pack results and send them to Blob storage
+        # Pack score results and send them to Blob storage
         logger.info("Packing results...")
         output_file = join(root_dir, 'run', 'output.zip')
         shutil.make_archive(os.path.splitext(output_file)[0], 'zip', output_dir)

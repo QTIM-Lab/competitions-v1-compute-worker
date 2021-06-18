@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SERVICE_PRINCIPAL_APPID=os.getenv("AZURE_CLIENT_ID")
-SERVICE_PRINCIPAL_CLIENT_SECRET=os.getenv("AZURE_CLIENT_SECRET")
+SERVICE_PRINCIPAL_APPID=os.getenv("AZURE_ACR_TOKEN_NAME")
+SERVICE_PRINCIPAL_CLIENT_SECRET=os.getenv("AZURE_ACR_TOKEN_PASS")
 REGISTRY=os.getenv("AZURE_CONTAINER_REGISTRY")+".azurecr.io"
 # pdb.set_trace()
 
