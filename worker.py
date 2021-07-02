@@ -77,6 +77,24 @@ def get_available_memory():
     mem_mib = mem_bytes / (1024. ** 2)
     return int(mem_mib)
 
+# BB
+# Bad design, but we need to login ahead of time when using custom
+# docker image in azure registry
+SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
+SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
+AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
+def login(registry=REGISTRY):
+    login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
+        appid=SERVICE_PRINCIPAL_APPID, 
+        secret=SERVICE_PRINCIPAL_CLIENT_SECRET, 
+        registry=registry)
+
+    process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+    stdout, stderr = process.communicate()
+    print("stdout: " + stdout)
+    print("stderr: " + stderr)
+login()
 
 def do_docker_pull(image_name, task_id, secret):
     logger.info("Running docker pull for image: {}".format(image_name))
@@ -458,8 +476,8 @@ def run(task_id, task_args):
     detailed_results_url = task_args.get('detailed_results_url')
     private_output_url = task_args['private_output_url']
     
-    special_results_url = task_args['special_results_url'] # BB
-    logger.info("### \n\n\n special_results_url: {}###\n\n\n".format(special_results_url))
+    docker_results_url = task_args['docker_results_url'] # BB
+    logger.info("### \n\n\n docker_results_url: {}###\n\n\n".format(docker_results_url))
 
     execution_time_limit = task_args['execution_time_limit']
     # container = task_args['container_name']
@@ -820,7 +838,12 @@ def run(task_id, task_args):
                     # task_args = {'file_name': 'mednist_docker_image.zip','user':'24'}
                     temp_dir = os.environ.get('SUBMISSION_TEMP_DIR', '/tmp/codalab')
                     unzip_dir = os.path.join(temp_dir,'tmp_unzip_dir')
-
+                    logger.info("#### \n\n {}\n{}\n{}\n{}\n  ###\n\n\n".format(SERVICE_PRINCIPAL_APPID,
+                                                                               SERVICE_PRINCIPAL_CLIENT_SECRET,
+                                                                               AZURE_CONTAINER_REGISTRY,
+                                                                               REGISTRY,
+                                                                               )
+                    )
                     def login(registry=REGISTRY):
                         login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
                             appid=SERVICE_PRINCIPAL_APPID, 
@@ -881,23 +904,24 @@ def run(task_id, task_args):
                 logger.info("\n\n$$$$$$$$$$$$\n\n {} \n\n$$$$$$$$$$$\n\n".format(os.listdir(predictions_dir))) # BB
 
                 # BB
-                # Making fake model content
-                special_results_file_name = 'special_results_file.txt'
-                special_results_file = join(predictions_dir, special_results_file_name) # './tmpfQycVE'/run/input/res/special_results_file.txt'
+                # Making fake model content for testing purposes
+                #special_results_file_name = 'special_results_file.txt'
+                #special_results_file = join(predictions_dir, special_results_file_name) # './tmpfQycVE'/run/input/res/special_results_file.txt'
 
-                with open(special_results_file, 'w') as file:
-                    file.write('Writing \"model\" content')
+                # with open(special_results_file, 'w') as file:
+                #     file.write('Writing \"model\" content')
 
                 # Create the zip archive
-                shutil.make_archive(os.path.join(input_dir, "special_results_file"), 'zip', predictions_dir, ".")
+                shutil.make_archive(os.path.join(input_dir, "docker_output"), 'zip', predictions_dir, ".")
 
                 # Copy archive into ./res folder as we created it one directory up
-                shutil.move(os.path.join(input_dir, "special_results_file.zip"), os.path.join(predictions_dir, "special_results_file.zip"))
+                shutil.move(os.path.join(input_dir, "docker_output.zip"), os.path.join(predictions_dir, "docker_output.zip"))
                 # BB
                 # This could go in a score program that is specific to the training phase or maybe it should stay in the worker
+                # This is qa to look for if the model is actually there...I think
                 training_phase = True
                 if training_phase:
-                    model_files = [i for i in os.listdir(predictions_dir) if i.find('special_results_file.zip') != -1]
+                    model_files = [i for i in os.listdir(predictions_dir) if i.find('docker_output.zip') != -1]
                     if len(model_files) == 0:
                         # check results directory (model and classification results dir)
                         raise Exception('No model file found...{}'.format(model_files))
@@ -906,8 +930,7 @@ def run(task_id, task_args):
                         raise Exception('Multiple model files found...{}'.format(model_files))
                     elif len(model_files) == 1:
                         # Copy model archive to azure
-                        # put_blob(special_results_url, predictions_dir + "/" + "special_results_file.zip")
-                        put_blob(special_results_url, predictions_dir + "/" + model_files[0])
+                        put_blob(docker_results_url, predictions_dir + "/" + model_files[0])
 
 
                 # Scoring program
