@@ -827,111 +827,113 @@ def run(task_id, task_args):
                 ]
                 
                 prog_cmd = docker_cmd + prog_cmd
-
-                try: # BB
-                    logger.info("Attempting to Login to docker registry")
-                    SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
-                    SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
-                    AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
-                    REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
-                    # task_args should look like this:
-                    # task_args = {'file_name': 'mednist_docker_image.zip','user':'24'}
-                    temp_dir = os.environ.get('SUBMISSION_TEMP_DIR', '/tmp/codalab')
-                    unzip_dir = os.path.join(temp_dir,'tmp_unzip_dir')
-                    logger.info("#### \n\n {}\n{}\n{}\n{}\n  ###\n\n\n".format(SERVICE_PRINCIPAL_APPID,
-                                                                               SERVICE_PRINCIPAL_CLIENT_SECRET,
-                                                                               AZURE_CONTAINER_REGISTRY,
-                                                                               REGISTRY,
-                                                                               )
-                    )
-                    def login(registry=REGISTRY):
-                        login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
-                            appid=SERVICE_PRINCIPAL_APPID, 
-                            secret=SERVICE_PRINCIPAL_CLIENT_SECRET, 
-                            registry=registry)
-
-                        process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
-                        stdout, stderr = process.communicate()
-                        print("stdout: " + stdout)
-                        print("stderr: " + stderr)
-                    login()
-
-                except:
-                    logger.info("Docker Login Failed")
-
-                participant_docker_submission_cmd = [
-                    'docker',
-                    'run',
-                    # Ask all participants to add this user
-                    #'-u',
-                    #'participant',
-                    # Cut internet
-                    '--net',
-                    'none',
-                    '--shm-size=256m',
-                    # Remove it after run
-                    '--rm',
-                    # Add support for GPUs and nvidia
-                    # '--gpus',
-                    # 'all',
-                    # Give it a name associated to task_id
-                    '--name={}'.format("participant_docker_submission_taskid_"+str(task_id)),
-                    # Try the new timeout feature
-                    '--stop-timeout={}'.format(execution_time_limit),
-                    # Don't allow subprocesses to raise privileges
-                    '--security-opt=no-new-privileges',
-                    # Set the right volume
-                    # '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/training-data/'), # :ro for read-only file system; Template Challenge
-                    '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/MedNIST/test-data/'), # :ro for read-only file system; MedNIST Challenge
-                    '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
-                    # Set aside 512m memory for the host
-                    #'--memory', '{}MB'.format(available_memory_mib - 512),
-                    # Don't buffer python output, so we don't lose any
-                    #'-e', 'PYTHONUNBUFFERED=1',
-                    # Set current working directory
-                    #'-w', run_dir,
-                    # Note that hidden data dir is excluded here!
-                    # Set the right image
-                    task_args['submit_docker_command'],
-                ]
-
+                
+                # BB
                 if task_args['submit_docker_command'] != 'this is not a docker submission':
+                    try:
+                        logger.info("Attempting to Login to docker registry")
+                        SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
+                        SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
+                        AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+                        REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
+                        # task_args should look like this:
+                        # task_args = {'file_name': 'mednist_docker_image.zip','user':'24'}
+                        temp_dir = os.environ.get('SUBMISSION_TEMP_DIR', '/tmp/codalab')
+                        unzip_dir = os.path.join(temp_dir,'tmp_unzip_dir')
+                        logger.info("#### \n\n {}\n{}\n{}\n{}\n  ###\n\n\n".format(SERVICE_PRINCIPAL_APPID,
+                                                                                SERVICE_PRINCIPAL_CLIENT_SECRET,
+                                                                                AZURE_CONTAINER_REGISTRY,
+                                                                                REGISTRY,
+                                                                                )
+                        )
+                        def login(registry=REGISTRY):
+                            login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
+                                appid=SERVICE_PRINCIPAL_APPID, 
+                                secret=SERVICE_PRINCIPAL_CLIENT_SECRET, 
+                                registry=registry)
+
+                            process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+                            stdout, stderr = process.communicate()
+                            print("stdout: " + stdout)
+                            print("stderr: " + stderr)
+                        login()
+
+                    except:
+                        logger.info("Docker Login Failed")
+
+                    participant_docker_submission_cmd = [
+                        'docker',
+                        'run',
+                        # Ask all participants to add this user
+                        #'-u',
+                        #'participant',
+                        # Cut internet
+                        '--net',
+                        'none',
+                        '--shm-size=256m',
+                        # Remove it after run
+                        '--rm',
+                        # Add support for GPUs and nvidia
+                        # '--gpus',
+                        # 'all',
+                        # Give it a name associated to task_id
+                        '--name={}'.format("participant_docker_submission_taskid_"+str(task_id)),
+                        # Try the new timeout feature
+                        '--stop-timeout={}'.format(execution_time_limit),
+                        # Don't allow subprocesses to raise privileges
+                        '--security-opt=no-new-privileges',
+                        # Set the right volume
+                        # '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/training-data/'), # :ro for read-only file system; Template Challenge
+                        '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/MedNIST/test-data/'), # :ro for read-only file system; MedNIST Challenge
+                        '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
+                        # Set aside 512m memory for the host
+                        #'--memory', '{}MB'.format(available_memory_mib - 512),
+                        # Don't buffer python output, so we don't lose any
+                        #'-e', 'PYTHONUNBUFFERED=1',
+                        # Set current working directory
+                        #'-w', run_dir,
+                        # Note that hidden data dir is excluded here!
+                        # Set the right image
+                        task_args['submit_docker_command'],
+                    ]
+
+                    
                     print('@CUSTOM DOCKER START@')
                     logger.info("Invoking participant docker submission: %s", participant_docker_submission_cmd)
                     participant_docker_process = Popen(participant_docker_submission_cmd)
                     participant_docker_process.wait() # This halts other actions till this run isfinished.
                     print('@CUSTOM DOCKER END@')
+
+                    # BB
+                    # Making fake model content for testing purposes
+                    #special_results_file_name = 'special_results_file.txt'
+                    #special_results_file = join(predictions_dir, special_results_file_name) # './tmpfQycVE'/run/input/res/special_results_file.txt'
+
+                    # with open(special_results_file, 'w') as file:
+                    #     file.write('Writing \"model\" content')
+
+                    # Create the zip archive
+                    shutil.make_archive(os.path.join(input_dir, "docker_output"), 'zip', predictions_dir, ".")
+
+                    # Copy archive into ./res folder as we created it one directory up
+                    shutil.move(os.path.join(input_dir, "docker_output.zip"), os.path.join(predictions_dir, "docker_output.zip"))
+                    # BB
+                    # This could go in a score program that is specific to the training phase or maybe it should stay in the worker
+                    # This is qa to look for if the model is actually there...I think
+                    training_phase = True
+                    if training_phase:
+                        model_files = [i for i in os.listdir(predictions_dir) if i.find('docker_output.zip') != -1]
+                        if len(model_files) == 0:
+                            # check results directory (model and classification results dir)
+                            raise Exception('No model file found...{}'.format(model_files))
+                        elif len(model_files) > 1:
+                            # check results directory (model and classification results dir)
+                            raise Exception('Multiple model files found...{}'.format(model_files))
+                        elif len(model_files) == 1:
+                            # Copy model archive to azure
+                            put_blob(docker_results_url, predictions_dir + "/" + model_files[0])
+
                 logger.info("\n\n$$$$$$$$$$$$\n\n {} \n\n$$$$$$$$$$$\n\n".format(os.listdir(predictions_dir))) # BB
-
-                # BB
-                # Making fake model content for testing purposes
-                #special_results_file_name = 'special_results_file.txt'
-                #special_results_file = join(predictions_dir, special_results_file_name) # './tmpfQycVE'/run/input/res/special_results_file.txt'
-
-                # with open(special_results_file, 'w') as file:
-                #     file.write('Writing \"model\" content')
-
-                # Create the zip archive
-                shutil.make_archive(os.path.join(input_dir, "docker_output"), 'zip', predictions_dir, ".")
-
-                # Copy archive into ./res folder as we created it one directory up
-                shutil.move(os.path.join(input_dir, "docker_output.zip"), os.path.join(predictions_dir, "docker_output.zip"))
-                # BB
-                # This could go in a score program that is specific to the training phase or maybe it should stay in the worker
-                # This is qa to look for if the model is actually there...I think
-                training_phase = True
-                if training_phase:
-                    model_files = [i for i in os.listdir(predictions_dir) if i.find('docker_output.zip') != -1]
-                    if len(model_files) == 0:
-                        # check results directory (model and classification results dir)
-                        raise Exception('No model file found...{}'.format(model_files))
-                    elif len(model_files) > 1:
-                        # check results directory (model and classification results dir)
-                        raise Exception('Multiple model files found...{}'.format(model_files))
-                    elif len(model_files) == 1:
-                        # Copy model archive to azure
-                        put_blob(docker_results_url, predictions_dir + "/" + model_files[0])
-
 
                 # Scoring program
                 logger.info("Invoking program: %s", " ".join(prog_cmd))
