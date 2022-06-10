@@ -1,1 +1,1 @@
-docker build -t codalab/competitions-v1-compute-worker:docker . 
+docker build -t codalab/competitions-v1-compute-worker:docker .

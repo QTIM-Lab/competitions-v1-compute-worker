@@ -29,6 +29,8 @@ from billiard import SoftTimeLimitExceeded
 from celery import Celery, task
 
 # from celery.app import app_or_default
+# BB
+from unrar import rarfile
 
 app = Celery('worker')
 app.config_from_object('celeryconfig')
@@ -105,7 +107,7 @@ def do_docker_pull(image_name, task_id, secret):
         logger.info("Docker pull complete for image: {0} with output of {1}".format(image_name, docker_pull))
     except CalledProcessError as error:
         logger.info("Docker pull for image: {} returned a non-zero exit code!")
-
+        logger.info("\n\n\n\n\n BB BOMBED OUT line 108 \n\n\n\n\n")
         _send_update(task_id, 'failed', secret, extra={
             'traceback': error.output,
             'metadata': error.returncode
@@ -228,6 +230,7 @@ def _send_update(task_id, status, secret, virtual_host='/', extra=None):
         else:
             logger.info("NOT HERE")
             new_connection.virtual_host = virtual_host
+            logger.info("\n\n\n\n\n BB IS THIS HAPPENING? 231 \n\n\n\n\n")
             app.send_task(
                 'apps.web.tasks.update_submission',
                 args=(task_id, task_args, secret),
@@ -374,15 +377,20 @@ def test(task_id, task_args):
     unzip_dir = os.path.join(temp_dir,'tmp_unzip_dir')
 
     def login(registry=REGISTRY):
+        logger.info('#### login started ####')
         login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
             appid=SERVICE_PRINCIPAL_APPID, secret=SERVICE_PRINCIPAL_CLIENT_SECRET, registry=registry)
-
         process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
         stdout, stderr = process.communicate()
+        _send_update(task_id, 'running', secret=task_args['secret'], extra={
+                     'metadata': 'image upload', 'info':'docker login complete'})
+        time.sleep(5)
         print("stdout: " + stdout)
         print("stderr: " + stderr)
 
+
     def unzip():
+        logger.info('#### unzip ####')
         try:
             # pdb.set_trace()
             shutil.rmtree(unzip_dir)
@@ -390,12 +398,30 @@ def test(task_id, task_args):
             print('creating {} directory'.format(unzip_dir))
             os.mkdir(unzip_dir)
             shutil.copyfile(src=os.path.join(docker_image_path, task_args['file_name']),dst=os.path.join(unzip_dir, task_args['file_name']))
-        with ZipFile(os.path.join(unzip_dir, task_args['file_name']), 'r') as zipObj:
-            zipObj.extractall(path=unzip_dir)
+            logger.info('#### unzip - B ####')
+        if task_args['file_name'].find(".rar") != -1:
+            rar = rarfile.RarFile(os.path.join(unzip_dir, task_args['file_name']))
+            rar.extractall(unzip_dir)
+        elif task_args['file_name'].find(".zip") != -1:
+            # Work in progress - fix
+            try:
+                with ZipFile(os.path.join(unzip_dir, task_args['file_name']), 'r') as zipObj:
+                    zipObj.extractall(path=unzip_dir)
+                _send_update(task_id, 'running', secret=task_args['secret'], extra={
+                            'metadata': 'image upload', 'info':'unzipping archive'})
+            except:
+                _send_update(task_id, 'failed', secret=task_args['secret'], extra={
+                            'metadata': 'image upload', 'info':'This is not a zip archive.'})
+            time.sleep(5)
 
     def build(repo,image):
-        tag = task_args['file_name'].replace('.zip','').replace('\n','').replace(' ','')
+        logger.info('#### build ####')
+        tag = task_args['file_name'].replace('.zip','').replace('.rar','').replace('\n','').replace(' ','')
         tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
+        logger.info('#### {repo} {image} {tag} ####')
+        _send_update(task_id, 'running', secret=task_args['secret'], extra={
+                     'metadata': 'image upload', 'info':'building image'})
+        time.sleep(5)
         try:
             os.chdir(unzip_dir)
         except:
@@ -408,17 +434,22 @@ def test(task_id, task_args):
         print("stderr: " + stderr)
 
     def push(repo,image):
-        tag = task_args['file_name'].replace('.zip','').replace('\n','').replace(' ','')
+        logger.info('#### push ####')
+        tag = task_args['file_name'].replace('.zip','').replace('.rar','').replace('\n','').replace(' ','')
         tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
         docker_push_cmd = "docker push {}/user_{}:{}".format(repo,image,tag)
         process = Popen(docker_push_cmd.split(" "), stdout=PIPE, stderr=PIPE)
         stdout, stderr = process.communicate()
         print("stdout: " + stdout)
         print("stderr: " + stderr)
+        _send_update(task_id, 'running', secret=task_args['secret'], extra={
+        'metadata': 'image upload', 'info':'pushing image'})
+        time.sleep(5)
 
     def clean_up(repo,image):
+        logger.info('#### clean_up ####')
         # Docker image
-        tag = task_args['file_name'].replace('.zip','').replace('\n','').replace(' ','')
+        tag = task_args['file_name'].replace('.zip','').replace('.rar','').replace('\n','').replace(' ','')
         tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
         docker_clean_up_cmd = "docker image rm {}/user_{}:{}".format(repo,image,tag)
         process = Popen(docker_clean_up_cmd.split(" "), stdout=PIPE, stderr=PIPE)
@@ -431,6 +462,9 @@ def test(task_id, task_args):
             os.chdir('../') # meant to bring you to path in variable `temp_dir`
             shutil.rmtree(unzip_dir)
             os.remove(os.path.join(docker_image_path, task_args['file_name']))
+            _send_update(task_id, 'running', secret=task_args['secret'], extra={
+            'metadata': 'image upload', 'info':'cleaning up process'})
+            time.sleep(5)
         except:
             raise Exception( "Can\'t find {} or {}".format( unzip_dir, os.path.join(docker_image_path, task_args['file_name']) ) )
 
@@ -442,10 +476,10 @@ def test(task_id, task_args):
         clean_up(REGISTRY,task_args['user'])
         # time.sleep(5)
         _send_update(task_id, 'finished', secret=task_args['secret'], extra={
-                     'metadata': 'image upload'})
+                     'metadata': 'image upload', 'info':'success'})
     except:
         _send_update(task_id, 'failed', secret=task_args['secret'], extra={
-                     'metadata': 'image upload'})
+                     'metadata': 'image upload', 'info':'failure'})
 
 
 @task(name="compute_worker_run")
@@ -453,6 +487,7 @@ def run_wrapper(task_id, task_args):
     try:
         run(task_id, task_args)
     except SoftTimeLimitExceeded:
+        logger.info("\n\n\n\n\n\nDID WE FAIL RANDOMLY\n\n\n\n\n\n")
         _send_update(task_id, {'status': 'failed'}, task_args['secret'])
 
 
@@ -883,8 +918,7 @@ def run(task_id, task_args):
                         # Don't allow subprocesses to raise privileges
                         '--security-opt=no-new-privileges',
                         # Set the right volume
-                        # '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/training-data/'), # :ro for read-only file system; Template Challenge
-                        '-v', '{0}:/mnt/in:ro'.format('/mnt/medicicodalabdev/input-data/MedNIST/test-data/'), # :ro for read-only file system; MedNIST Challenge
+                        '-v', '{0}:/mnt/in:ro'.format('/mnt/path_to_data/'), # :ro for read-only file system; Could be azure blob mount;
                         '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
                         # Set aside 512m memory for the host
                         #'--memory', '{}MB'.format(available_memory_mib - 512),
@@ -900,9 +934,19 @@ def run(task_id, task_args):
                     
                     print('@CUSTOM DOCKER START@')
                     logger.info("Invoking participant docker submission: %s", participant_docker_submission_cmd)
-                    participant_docker_process = Popen(participant_docker_submission_cmd)
-                    participant_docker_process.wait() # This halts other actions till this run isfinished.
+                    participant_docker_process = Popen(participant_docker_submission_cmd, stdout=PIPE, stderr=PIPE)
+                    # participant_docker_process.wait() # This halts other actions till this run is finished. The problem is .communicate() below has .wait() baked in and using both together caused a bug where the process never finished unless you look at the logs
+                    drun_stdout, drun_stderr = participant_docker_process.communicate()
                     print('@CUSTOM DOCKER END@')
+
+                    def clean_up(image):
+                        # Docker image
+                        docker_clean_up_cmd = "docker image rm {}".format(image)
+                        process = Popen(docker_clean_up_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+                        stdout, stderr = process.communicate()
+                        print("stdout: " + stdout)
+                        print("stderr: " + stderr)
+                    clean_up(task_args['submit_docker_command'])
 
                     # BB
                     # Making fake model content for testing purposes
@@ -911,8 +955,17 @@ def run(task_id, task_args):
 
                     # with open(special_results_file, 'w') as file:
                     #     file.write('Writing \"model\" content')
+                    
+                    # Create stdout stderr data
+                    # with open(os.path.join(predictions_dir, 'stdout.txt'), 'w') as f:
+                    #     f.write(drun_stdout)
+                    
+                    with open(os.path.join(predictions_dir, 'stderr.txt'), 'w') as f:
+                        f.write(drun_stderr)
 
                     # Create the zip archive
+                    logger.info("\n\n\n CREATE ZIP ARCHIVE {} \n\n\n".format(input_dir))
+                    # /tmp/codalab/tmpeswJG1/run/input 
                     shutil.make_archive(os.path.join(input_dir, "docker_output"), 'zip', predictions_dir, ".")
 
                     # Copy archive into ./res folder as we created it one directory up
@@ -1106,6 +1159,7 @@ def run(task_id, task_args):
 
             if timed_out or exit_code != 0 or ingestion_program_exit_code != 0:
                 # Submission failed somewhere in here, bomb out
+                logger.info("\n\n\n\n\n BB BOMBED OUT line 1110 \n\n\n\n\n")
                 break
 
         stdout.close()
@@ -1170,16 +1224,19 @@ def run(task_id, task_args):
         # check if timed out AFTER output files are written! If we exit sooner, no output is written
         if timed_out:
             logger.exception("Run task timed out (task_id=%s).", task_id)
+            logger.info("\n\n\n\n\n BB BOMBED OUT line 1175 \n\n\n\n\n")
             _send_update(task_id, 'failed', secret, extra={
                 'metadata': debug_metadata
             })
         elif exit_code != 0 or ingestion_program_exit_code != 0:
             logger.exception("Run task exit code non-zero (task_id=%s).", task_id)
+            logger.info("\n\n\n\n\n BB BOMBED OUT line 1181 \n\n\n\n\n")
             _send_update(task_id, 'failed', secret, extra={
                 'traceback': open(stderr_file).read(),
                 'metadata': debug_metadata
             })
         else:
+            logger.info("\n\n\n\n\n BB BOMBED OUT (but finished???) line 1187 \n\n\n\n\n")
             _send_update(task_id, 'finished', secret, extra={
                 'metadata': debug_metadata
             })
@@ -1191,6 +1248,7 @@ def run(task_id, task_args):
             debug_metadata["end_cpu_usage"] = psutil.cpu_percent(interval=None)
 
         logger.exception("Run task failed (task_id=%s).", task_id)
+        logger.info("\n\n\n\n\n BB BOMBED OUT line 1199 \n\n\n\n\n")
         _send_update(task_id, 'failed', secret, extra={
             'traceback': traceback.format_exc(),
             'metadata': debug_metadata

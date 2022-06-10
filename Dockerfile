@@ -1,5 +1,7 @@
 FROM ubuntu:18.04
 
+# Move into our worker directory, so we're not in /
+WORKDIR /worker/
 
 #####
 # Install vim
@@ -47,9 +49,17 @@ RUN apt-get install -y entr
 
 RUN apt-get install -y python2.7 python-pip
 
-# Move into our worker directory, so we're not in /
-WORKDIR /worker/
- 
+#####
+# Install wget and then unrar
+#####
+RUN apt-get install wget
+RUN wget http://www.rarlab.com/rar/unrarsrc-5.4.5.tar.gz
+RUN tar zxvf unrarsrc-5.4.5.tar.gz
+RUN cd unrar && make lib && make install-lib
+
+## Needed for unrar library in requirements.txt
+ENV UNRAR_LIB_PATH=/usr/lib/libunrar.so
+
 # Install Python stuff we need to listen to the queue
 COPY requirements.txt /worker/requirements.txt
 RUN pip install -r requirements.txt
