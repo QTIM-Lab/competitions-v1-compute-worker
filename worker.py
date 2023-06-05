@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+import pdb
+from celery.contrib import rdb # debug worker
+
 import sys
 import urllib
 
@@ -85,6 +88,7 @@ def get_available_memory():
 SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
 SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
 AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+AZURE_ACCOUNT_NAME = os.getenv('AZURE_ACCOUNT_NAME', 'NOT FOUND') # storage account name
 REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
 def login(registry=REGISTRY):
     login_cmd = "docker login {registry} --username {appid} --password {secret}".format(
@@ -259,104 +263,104 @@ def alarm_handler(signum, frame):
     raise ExecutionTimeLimitExceeded
 
 
-# BB - Takes too long for > 1GB images
-@task(name="compute_worker_test")
-def test(task_id, task_args):
-    docker_image_path="/tmp/codalab/docker_images/"
-    logger.info("AJAX initiated job program to load chuncks of zip file being uploaded")
-    logger.info(task_args)
-    try:
-        import os, sys
-        from subprocess import Popen, PIPE
+# # BB - Takes too long for > 1GB images
+# @task(name="compute_worker_test")
+# def test(task_id, task_args):
+#     docker_image_path="/tmp/codalab/docker_images/"
+#     logger.info("AJAX initiated job program to load chuncks of zip file being uploaded")
+#     logger.info(task_args)
+#     try:
+#         import os, sys
+#         from subprocess import Popen, PIPE
 
-        SERVICE_PRINCIPAL_APPID=""
-        SERVICE_PRINCIPAL_CLIENT_SECRET=""
+#         SERVICE_PRINCIPAL_APPID=""
+#         SERVICE_PRINCIPAL_CLIENT_SECRET=""
 
-        def load():
-            logger.info("In LOAD")
-            load_cmd = "docker load -i {}/{}".format(docker_image_path, task_args['file_name'])
-            logger.info(load_cmd)
+#         def load():
+#             logger.info("In LOAD")
+#             load_cmd = "docker load -i {}/{}".format(docker_image_path, task_args['file_name'])
+#             logger.info(load_cmd)
 
-            process = Popen(load_cmd.split(" "), stdout=PIPE, stderr=PIPE)
-            stdout, stderr = process.communicate()
-            print "stdout: " + stdout
-            print"stderr: " + stderr
+#             process = Popen(load_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+#             stdout, stderr = process.communicate()
+#             print "stdout: " + stdout
+#             print"stderr: " + stderr
 
-            # Get tag
-            original_repo_tag = stdout.replace('Loaded image: ', '').replace('\n','')
-            return original_repo_tag
+#             # Get tag
+#             original_repo_tag = stdout.replace('Loaded image: ', '').replace('\n','')
+#             return original_repo_tag
 
-        def tag(input_tag, output_tag):
-            logger.info("In TAG")
-            tag_cmd = "docker tag {} {}".format(input_tag, output_tag)
-            logger.info(tag_cmd)
+#         def tag(input_tag, output_tag):
+#             logger.info("In TAG")
+#             tag_cmd = "docker tag {} {}".format(input_tag, output_tag)
+#             logger.info(tag_cmd)
 
-            process = Popen(tag_cmd.split(" "), stdout=PIPE, stderr=PIPE)
-            stdout, stderr = process.communicate()
-            print "stdout: " + stdout
-            print "stderr: " + stderr
+#             process = Popen(tag_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+#             stdout, stderr = process.communicate()
+#             print "stdout: " + stdout
+#             print "stderr: " + stderr
 
 
-        def login(registry=".azurecr.io"):
-            logger.info("In LOGIN")
-            login_cmd = "docker login {registry} --username {appid} --password {secret}".format(appid=SERVICE_PRINCIPAL_APPID,secret=SERVICE_PRINCIPAL_CLIENT_SECRET,registry=registry)
+#         def login(registry=".azurecr.io"):
+#             logger.info("In LOGIN")
+#             login_cmd = "docker login {registry} --username {appid} --password {secret}".format(appid=SERVICE_PRINCIPAL_APPID,secret=SERVICE_PRINCIPAL_CLIENT_SECRET,registry=registry)
 
-            process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
-            stdout, stderr = process.communicate()
-            print "stdout: " + stdout
-            print "stderr: " + stderr
+#             process = Popen(login_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+#             stdout, stderr = process.communicate()
+#             print "stdout: " + stdout
+#             print "stderr: " + stderr
 
-        def push(image='hello-world:latest'):
-            logger.info("In PUSH")
-            push_cmd = """docker push {0}""".format(image)
-            logger.info("Image we are having trouble with: {}".format(image))
-            process = Popen(push_cmd.split(" "), stdout=PIPE, stderr=PIPE)
-            stdout, stderr = process.communicate()
-            print "stdout: " + stdout
-            print "stderr: " + stderr
+#         def push(image='hello-world:latest'):
+#             logger.info("In PUSH")
+#             push_cmd = """docker push {0}""".format(image)
+#             logger.info("Image we are having trouble with: {}".format(image))
+#             process = Popen(push_cmd.split(" "), stdout=PIPE, stderr=PIPE)
+#             stdout, stderr = process.communicate()
+#             print "stdout: " + stdout
+#             print "stderr: " + stderr
 
-        def clean_up(original_repo_tag, full_output_tag):
-            logger.info("In CLEAN UP")
+#         def clean_up(original_repo_tag, full_output_tag):
+#             logger.info("In CLEAN UP")
 
-            logger.info("Deleting original")
-            cln_cmd_orig = """docker image rm -f {0}""".format(original_repo_tag)
-            process = Popen(cln_cmd_orig.split(" "), stdout=PIPE, stderr=PIPE)
-            stdout_orig, stderr_orig = process.communicate()
-            print "stdout_orig: " + stdout_orig
-            print "stderr_orig: " + stderr_orig
+#             logger.info("Deleting original")
+#             cln_cmd_orig = """docker image rm -f {0}""".format(original_repo_tag)
+#             process = Popen(cln_cmd_orig.split(" "), stdout=PIPE, stderr=PIPE)
+#             stdout_orig, stderr_orig = process.communicate()
+#             print "stdout_orig: " + stdout_orig
+#             print "stderr_orig: " + stderr_orig
 
-            logger.info("Deleting tagged version")
-            cln_cmd_tagged = """docker image rm -f {0}""".format(full_output_tag)
-            process = Popen(cln_cmd_tagged.split(" "), stdout=PIPE, stderr=PIPE)
-            stdout_tagged, stderr_tagged = process.communicate()
-            print "stdout_tagged: " + stdout_tagged
-            print "stderr_tagged: " + stderr_tagged
+#             logger.info("Deleting tagged version")
+#             cln_cmd_tagged = """docker image rm -f {0}""".format(full_output_tag)
+#             process = Popen(cln_cmd_tagged.split(" "), stdout=PIPE, stderr=PIPE)
+#             stdout_tagged, stderr_tagged = process.communicate()
+#             print "stdout_tagged: " + stdout_tagged
+#             print "stderr_tagged: " + stderr_tagged
 
-            os.remove(docker_image_path+task_args['file_name'])
+#             os.remove(docker_image_path+task_args['file_name'])
 
-        # Get old image repo/tag and create a new one
-        original_repo_tag = load()
-        image_tag_list = original_repo_tag.split(":")
-        if len(image_tag_list) > 1:
-            image_tag = "{repo}_{tag}".format(repo=image_tag_list[0].replace('/','-'), tag=image_tag_list[1])
-        elif len(image_tag_list) == 1:
-            image_tag = image_tag_list[0]
+#         # Get old image repo/tag and create a new one
+#         original_repo_tag = load()
+#         image_tag_list = original_repo_tag.split(":")
+#         if len(image_tag_list) > 1:
+#             image_tag = "{repo}_{tag}".format(repo=image_tag_list[0].replace('/','-'), tag=image_tag_list[1])
+#         elif len(image_tag_list) == 1:
+#             image_tag = image_tag_list[0]
 
-        image_tag_user = 'user_{user}:tag_{image_tag}'.format(image_tag=image_tag, user=task_args['user'])
-        full_output_tag = '.azurecr.io/'+image_tag_user
+#         image_tag_user = 'user_{user}:tag_{image_tag}'.format(image_tag=image_tag, user=task_args['user'])
+#         full_output_tag = '.azurecr.io/'+image_tag_user
 
-        tag(original_repo_tag, full_output_tag)
+#         tag(original_repo_tag, full_output_tag)
 
-        # login to push
-        login()
-        # push
-        push(image=full_output_tag)
-        clean_up(original_repo_tag, full_output_tag)
+#         # login to push
+#         login()
+#         # push
+#         push(image=full_output_tag)
+#         clean_up(original_repo_tag, full_output_tag)
 
-        time.sleep(5)
-        _send_update(task_id, 'finished', secret=task_args['secret'], extra={'metadata': 'image upload'})
-    except:
-        _send_update(task_id, 'failed', secret=task_args['secret'], extra={'metadata': 'image upload'})
+#         time.sleep(5)
+#         _send_update(task_id, 'finished', secret=task_args['secret'], extra={'metadata': 'image upload'})
+#     except:
+#         _send_update(task_id, 'failed', secret=task_args['secret'], extra={'metadata': 'image upload'})
 
 
 @task(name="compute_worker_image_upload") # This will build the image onsite from user uploaded instructions to cut down on load time
@@ -370,6 +374,7 @@ def test(task_id, task_args):
     SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
     SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
     AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+    AZURE_ACCOUNT_NAME = os.getenv('AZURE_ACCOUNT_NAME', 'NOT FOUND') # storage account name
 
     REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
     # task_args should look like this:
@@ -405,13 +410,18 @@ def test(task_id, task_args):
         elif task_args['file_name'].find(".zip") != -1:
             # Work in progress - fix
             try:
+                # rdb.set_trace()
                 with ZipFile(os.path.join(unzip_dir, task_args['file_name']), 'r') as zipObj:
                     zipObj.extractall(path=unzip_dir)
                 _send_update(task_id, 'running', secret=task_args['secret'], extra={
                             'metadata': 'image upload', 'info':'unzipping archive'})
+                upload_failed = False
+                return upload_failed
             except:
                 _send_update(task_id, 'failed', secret=task_args['secret'], extra={
-                            'metadata': 'image upload', 'info':'This is not a zip archive.'})
+                            'metadata': 'image upload', 'info':'This is not a zip archive or your file was too large.'})
+                upload_failed = True
+                return upload_failed
             time.sleep(5)
 
     def build(repo,image):
@@ -437,6 +447,7 @@ def test(task_id, task_args):
         logger.info('#### push ####')
         tag = task_args['file_name'].replace('.zip','').replace('.rar','').replace('\n','').replace(' ','')
         tag = tag if tag[0] != '.' and tag[0] != '-' else tag[1:]
+        logger.info("#### PUSH DEBUG {} {}####".format(task_args['file_name'], tag))
         docker_push_cmd = "docker push {}/user_{}:{}".format(repo,image,tag)
         process = Popen(docker_push_cmd.split(" "), stdout=PIPE, stderr=PIPE)
         stdout, stderr = process.communicate()
@@ -446,7 +457,7 @@ def test(task_id, task_args):
         'metadata': 'image upload', 'info':'pushing image'})
         time.sleep(5)
 
-    def clean_up(repo,image):
+    def clean_up(repo,image,upload_failed):
         logger.info('#### clean_up ####')
         # Docker image
         tag = task_args['file_name'].replace('.zip','').replace('.rar','').replace('\n','').replace(' ','')
@@ -461,6 +472,18 @@ def test(task_id, task_args):
             # pdb.set_trace()
             os.chdir('../') # meant to bring you to path in variable `temp_dir`
             shutil.rmtree(unzip_dir)
+            # copy zip archive to "/mnt/midrccodalabcu/input-data/MIDRC/mRALE_challenge/DockerImageArchives".format(AZURE_ACCOUNT_NAME) # Needs to change by challenge...
+            # Multiple challenges would drop images to the same spot so this needs work if challenges run in parallel and also runs the risk of a new challenge dumping into an old challenges directory
+            # import os, shutil, datetime # for debug
+            # task_args = {"file_name":"midrc_docker_all8_os.zip", "user":"14"} # test task_args
+            # docker_image_path = "/tmp/codalab/docker_images" # testing input 
+            import datetime
+            zip_archive_storage_folder_name = "{}_user{}".format(datetime.datetime.now().strftime("%m_%d_%Y-%H:%M:%S"), task_args['user'])
+            if upload_failed == False:
+                print("\n\n\nHERE##\n\n\n\n")
+                os.makedirs(os.path.join("/mnt/{}/input-data/MIDRC/mRALE_challenge/DockerImageArchives".format(AZURE_ACCOUNT_NAME),zip_archive_storage_folder_name))
+                shutil.copyfile(os.path.join(docker_image_path, task_args['file_name']), os.path.join("/mnt/{}/input-data/MIDRC/mRALE_challenge/DockerImageArchives".format(AZURE_ACCOUNT_NAME), zip_archive_storage_folder_name, task_args['file_name']))
+
             os.remove(os.path.join(docker_image_path, task_args['file_name']))
             _send_update(task_id, 'running', secret=task_args['secret'], extra={
             'metadata': 'image upload', 'info':'cleaning up process'})
@@ -469,14 +492,21 @@ def test(task_id, task_args):
             raise Exception( "Can\'t find {} or {}".format( unzip_dir, os.path.join(docker_image_path, task_args['file_name']) ) )
 
     try:
-        login()
-        unzip()
-        build(REGISTRY,task_args['user'])
-        push(REGISTRY,task_args['user'])
-        clean_up(REGISTRY,task_args['user'])
+        upload_failed = unzip()
+        # rdb.set_trace()
+        if upload_failed == False:
+            login()
+            build(REGISTRY, task_args['user'])
+            push(REGISTRY, task_args['user'])
+        # scp_to_dgm_vm();
+        clean_up(REGISTRY, task_args['user'], upload_failed)
         # time.sleep(5)
-        _send_update(task_id, 'finished', secret=task_args['secret'], extra={
-                     'metadata': 'image upload', 'info':'success'})
+        if upload_failed == False:
+            _send_update(task_id, 'finished', secret=task_args['secret'], extra={
+                        'metadata': 'image upload', 'info':'success'})
+        else:
+            _send_update(task_id, 'failed', secret=task_args['secret'], extra={
+                        'metadata': 'image upload', 'info':'failure'})            
     except:
         _send_update(task_id, 'failed', secret=task_args['secret'], extra={
                      'metadata': 'image upload', 'info':'failure'})
@@ -870,6 +900,7 @@ def run(task_id, task_args):
                         SERVICE_PRINCIPAL_APPID = os.getenv('AZURE_ACR_TOKEN_NAME', 'NOT FOUND')
                         SERVICE_PRINCIPAL_CLIENT_SECRET = os.getenv('AZURE_ACR_TOKEN_PASS', 'NOT FOUND')
                         AZURE_CONTAINER_REGISTRY = os.getenv('AZURE_CONTAINER_REGISTRY', 'NOT FOUND')
+                        AZURE_ACCOUNT_NAME = os.getenv('AZURE_ACCOUNT_NAME', 'NOT FOUND') # storage account name
                         REGISTRY = "{}.azurecr.io".format(AZURE_CONTAINER_REGISTRY)
                         # task_args should look like this:
                         # task_args = {'file_name': 'mednist_docker_image.zip','user':'24'}
@@ -918,7 +949,9 @@ def run(task_id, task_args):
                         # Don't allow subprocesses to raise privileges
                         '--security-opt=no-new-privileges',
                         # Set the right volume
-                        '-v', '{0}:/mnt/in:ro'.format('/mnt/path_to_data/'), # :ro for read-only file system; Could be azure blob mount;
+                        '-v', '{0}:/mnt/in:ro'.format('/mnt/{0}/input-data/MIDRC/mRALE_challenge/training_data/'.format(AZURE_ACCOUNT_NAME)), # :ro for read-only file system; Could be azure blob mount;
+                        # '-v', '{0}:/mnt/in:ro'.format('/mnt/{0}/input-data/MIDRC/mRALE_challenge/validation_data/'.format(AZURE_ACCOUNT_NAME)), # :ro for read-only file system; Could be azure blob mount;
+                        # '-v', '{0}:/mnt/in:ro'.format('/mnt/{0}/input-data/MIDRC/mRALE_challenge/testing_data/'.format(AZURE_ACCOUNT_NAME)), # :ro for read-only file system; Could be azure blob mount;
                         '-v', '{0}:/mnt/out'.format(input_dir+"/res"),
                         # Set aside 512m memory for the host
                         #'--memory', '{}MB'.format(available_memory_mib - 512),
@@ -935,6 +968,7 @@ def run(task_id, task_args):
                     print('@CUSTOM DOCKER START@')
                     logger.info("Invoking participant docker submission: %s", participant_docker_submission_cmd)
                     participant_docker_process = Popen(participant_docker_submission_cmd, stdout=PIPE, stderr=PIPE)
+                    
                     # participant_docker_process.wait() # This halts other actions till this run is finished. The problem is .communicate() below has .wait() baked in and using both together caused a bug where the process never finished unless you look at the logs
                     drun_stdout, drun_stderr = participant_docker_process.communicate()
                     print('@CUSTOM DOCKER END@')
@@ -989,6 +1023,8 @@ def run(task_id, task_args):
                 logger.info("\n\n$$$$$$$$$$$$\n\n {} \n\n$$$$$$$$$$$\n\n".format(os.listdir(predictions_dir))) # BB
 
                 # Scoring program
+                # from celery.contrib import rdb
+                # rdb.set_trace()
                 logger.info("Invoking program: %s", " ".join(prog_cmd))
                 evaluator_process = Popen(
                     prog_cmd,
@@ -1236,7 +1272,7 @@ def run(task_id, task_args):
                 'metadata': debug_metadata
             })
         else:
-            logger.info("\n\n\n\n\n BB BOMBED OUT (but finished???) line 1187 \n\n\n\n\n")
+            # logger.info("\n\n\n\n\n BB BOMBED OUT (but finished???) line 1187 \n\n\n\n\n")
             _send_update(task_id, 'finished', secret, extra={
                 'metadata': debug_metadata
             })
@@ -1248,7 +1284,7 @@ def run(task_id, task_args):
             debug_metadata["end_cpu_usage"] = psutil.cpu_percent(interval=None)
 
         logger.exception("Run task failed (task_id=%s).", task_id)
-        logger.info("\n\n\n\n\n BB BOMBED OUT line 1199 \n\n\n\n\n")
+        # logger.info("\n\n\n\n\n BB BOMBED OUT line 1199 \n\n\n\n\n")
         _send_update(task_id, 'failed', secret, extra={
             'traceback': traceback.format_exc(),
             'metadata': debug_metadata
